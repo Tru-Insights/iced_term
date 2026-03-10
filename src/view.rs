@@ -326,18 +326,15 @@ impl<'a> TerminalView<'a> {
                 if let Some(data) = clipboard.read(ClipboardKind::Standard) {
                     let input: Vec<u8> = data.bytes().collect();
                     return Some(Command::Write(input));
-                } else {
-                    // No text in clipboard (likely an image) - send \x16 so
-                    // CLI tools like Claude Code can detect the paste and
-                    // read image data from the clipboard directly.
-                    return Some(Command::Write(vec![0x16]));
                 }
+                // No text in clipboard — do nothing. Sending 0x16 would
+                // trigger quoted-insert in many terminal programs.
             },
             BindingAction::Copy => {
-                clipboard.write(
-                    ClipboardKind::Standard,
-                    self.term.backend.selectable_content(),
-                );
+                let content = self.term.backend.selectable_content();
+                if !content.is_empty() {
+                    clipboard.write(ClipboardKind::Standard, content);
+                }
             },
             BindingAction::Noop => {
                 return None;
