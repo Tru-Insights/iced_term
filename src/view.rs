@@ -336,6 +336,16 @@ impl<'a> TerminalView<'a> {
                     clipboard.write(ClipboardKind::Standard, content);
                 }
             },
+            BindingAction::CopyOrChar(c) => {
+                let content = self.term.backend.selectable_content();
+                if !content.is_empty() {
+                    clipboard.write(ClipboardKind::Standard, content);
+                } else {
+                    let mut buf = [0u8; 4];
+                    let s = c.encode_utf8(&mut buf);
+                    return Some(Command::Write(s.as_bytes().to_vec()));
+                }
+            },
             BindingAction::Noop => {
                 return None;
             },

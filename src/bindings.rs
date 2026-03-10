@@ -8,6 +8,9 @@ use iced_core::{
 pub enum BindingAction {
     Copy,
     Paste,
+    /// Copy if there is an active selection, otherwise send the character
+    /// (e.g. \x03 for SIGINT). Matches Windows Terminal behavior.
+    CopyOrChar(char),
     Char(char),
     Esc(String),
     LinkOpen,
@@ -339,7 +342,11 @@ fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
 fn platform_keyboard_bindings() -> Vec<(Binding<InputKind>, BindingAction)> {
     generate_bindings!(
         KeyboardBinding;
+        // Ctrl+C: copy if selection exists, otherwise send SIGINT (\x03).
+        // Matches Windows Terminal behavior.
+        "c", Modifiers::COMMAND; BindingAction::CopyOrChar('\x03');
         "v", Modifiers::COMMAND; BindingAction::Paste;
+        // Keep Ctrl+Shift+C/V as explicit copy/paste for Linux terminal users.
         "c", Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Copy;
         "v", Modifiers::SHIFT | Modifiers::COMMAND; BindingAction::Paste;
         Insert, Modifiers::SHIFT; BindingAction::Paste;
