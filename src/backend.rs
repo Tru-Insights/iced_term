@@ -228,6 +228,12 @@ impl Backend {
                         self.notifier.notify(pty.into_bytes());
                         Action::default()
                     },
+                    Event::ClipboardStore(_clipboard_type, text) => {
+                        Action::ClipboardStore(text)
+                    },
+                    Event::ClipboardLoad(_clipboard_type, formatter) => {
+                        Action::ClipboardLoad(formatter)
+                    },
                     _ => Action::default(),
                 };
             },

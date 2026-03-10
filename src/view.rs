@@ -324,6 +324,9 @@ impl<'a> TerminalView<'a> {
             },
             BindingAction::Paste => {
                 if let Some(data) = clipboard.read(ClipboardKind::Standard) {
+                    // Normalize line endings: terminals expect \r for newlines.
+                    // Clipboard text from Windows or web content may have \r\n.
+                    let normalized = data.replace("\r\n", "\r").replace('\n', "\r");
                     let mut input: Vec<u8> = Vec::new();
                     let bracketed = last_content
                         .terminal_mode
@@ -331,7 +334,7 @@ impl<'a> TerminalView<'a> {
                     if bracketed {
                         input.extend_from_slice(b"\x1b[200~");
                     }
-                    input.extend_from_slice(data.as_bytes());
+                    input.extend_from_slice(normalized.as_bytes());
                     if bracketed {
                         input.extend_from_slice(b"\x1b[201~");
                     }
