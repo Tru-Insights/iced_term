@@ -53,6 +53,7 @@ pub enum Command {
     Resize(Option<Size<f32>>, Option<Size<f32>>),
     SelectStart(SelectionType, (f32, f32)),
     SelectUpdate((f32, f32)),
+    ClearSelection,
     ProcessLink(LinkAction, Point),
     MouseReport(MouseButton, Modifiers, Point, bool),
     ProcessAlacrittyEvent(Event),
@@ -267,6 +268,9 @@ impl Backend {
                 },
                 Command::SelectUpdate((x, y)) => {
                     self.update_selection(&mut term, x, y);
+                },
+                Command::ClearSelection => {
+                    term.selection = None;
                 },
                 Command::ProcessLink(link_action, point) => {
                     self.process_link_action(&term, link_action, point);
@@ -529,16 +533,15 @@ impl Backend {
     }
 
     pub fn selectable_content(&self) -> String {
-        let content = self.renderable_content();
-        let mut result = String::new();
-        if let Some(range) = content.selectable_range {
-            for indexed in content.grid.display_iter() {
-                if range.contains(indexed.point) {
-                    result.push(indexed.c);
-                }
+        // Use alacritty's selection_to_string() which properly handles
+        // newlines, trailing whitespace, wrapped lines, wide chars, and tabs.
+        let term_arc = self.term.clone();
+        if let Some(term) = term_arc.try_lock_unfair() {
+            if let Some(text) = term.selection_to_string() {
+                return text;
             }
         }
-        result
+        String::new()
     }
 
     pub fn sync(&mut self) {

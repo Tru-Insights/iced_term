@@ -324,7 +324,17 @@ impl<'a> TerminalView<'a> {
             },
             BindingAction::Paste => {
                 if let Some(data) = clipboard.read(ClipboardKind::Standard) {
-                    let input: Vec<u8> = data.bytes().collect();
+                    let mut input: Vec<u8> = Vec::new();
+                    let bracketed = last_content
+                        .terminal_mode
+                        .contains(TermMode::BRACKETED_PASTE);
+                    if bracketed {
+                        input.extend_from_slice(b"\x1b[200~");
+                    }
+                    input.extend_from_slice(data.as_bytes());
+                    if bracketed {
+                        input.extend_from_slice(b"\x1b[201~");
+                    }
                     return Some(Command::Write(input));
                 }
                 // No text in clipboard — do nothing. Sending 0x16 would
@@ -334,12 +344,14 @@ impl<'a> TerminalView<'a> {
                 let content = self.term.backend.selectable_content();
                 if !content.is_empty() {
                     clipboard.write(ClipboardKind::Standard, content);
+                    return Some(Command::ClearSelection);
                 }
             },
             BindingAction::CopyOrChar(c) => {
                 let content = self.term.backend.selectable_content();
                 if !content.is_empty() {
                     clipboard.write(ClipboardKind::Standard, content);
+                    return Some(Command::ClearSelection);
                 } else {
                     let mut buf = [0u8; 4];
                     let s = c.encode_utf8(&mut buf);
