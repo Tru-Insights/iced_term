@@ -215,49 +215,75 @@ impl Backend {
     }
 
     pub fn handle(&mut self, cmd: Command) -> Action {
-        let mut action = Action::default();
-        let term = self.term.clone();
-        let mut term = term.lock();
+        // Handle commands that don't need the terminal lock first.
+        // This avoids blocking the main thread when the PTY event loop
+        // holds the FairMutex lease during bursts of terminal output.
         match cmd {
             Command::ProcessAlacrittyEvent(event) => {
-                match event {
-                    Event::Exit => {
-                        action = Action::Shutdown;
-                    },
-                    Event::Title(title) => {
-                        action = Action::ChangeTitle(title);
-                    },
+                return match event {
+                    Event::Exit => Action::Shutdown,
+                    Event::Title(title) => Action::ChangeTitle(title),
                     Event::PtyWrite(pty) => {
-                        self.notifier.notify(pty.into_bytes())
+                        self.notifier.notify(pty.into_bytes());
+                        Action::default()
                     },
-                    _ => {},
+                    _ => Action::default(),
                 };
-            },
-            Command::Write(input) => {
-                self.write(input);
-                term.scroll_display(Scroll::Bottom);
-            },
-            Command::Scroll(delta) => {
-                self.scroll(&mut term, delta);
-            },
-            Command::Resize(layout_size, font_measure) => {
-                self.resize(&mut term, layout_size, font_measure);
-            },
-            Command::SelectStart(selection_type, (x, y)) => {
-                self.start_selection(&mut term, selection_type, x, y);
-            },
-            Command::SelectUpdate((x, y)) => {
-                self.update_selection(&mut term, x, y);
-            },
-            Command::ProcessLink(link_action, point) => {
-                self.process_link_action(&term, link_action, point);
             },
             Command::MouseReport(button, modifiers, point, pressed) => {
                 self.process_mouse_report(button, modifiers, point, pressed);
+                return Action::default();
             },
-        };
+            Command::Write(input) => {
+                // Write to PTY immediately (no lock needed).
+                self.write(input);
+                // Try to scroll to bottom without blocking. If the lock is
+                // busy, skip — it'll catch up on the next sync.
+                let term = self.term.clone();
+                if let Some(mut term) = term.try_lock_unfair() {
+                    term.scroll_display(Scroll::Bottom);
+                    self.internal_sync(&mut term);
+                }
+                return Action::default();
+            },
+            // Commands that need the terminal lock — fall through below.
+            _ => {},
+        }
 
-        action
+        // Scroll, Resize, Select, Link — need the terminal lock.
+        // Use try_lock_unfair to avoid blocking the main thread if the PTY
+        // event loop is holding the lease during a burst of output.
+        let term_arc = self.term.clone();
+        if let Some(mut term) = term_arc.try_lock_unfair() {
+            match cmd {
+                Command::Scroll(delta) => {
+                    self.scroll(&mut term, delta);
+                },
+                Command::Resize(layout_size, font_measure) => {
+                    self.resize(&mut term, layout_size, font_measure);
+                },
+                Command::SelectStart(selection_type, (x, y)) => {
+                    self.start_selection(&mut term, selection_type, x, y);
+                },
+                Command::SelectUpdate((x, y)) => {
+                    self.update_selection(&mut term, x, y);
+                },
+                Command::ProcessLink(link_action, point) => {
+                    self.process_link_action(&term, link_action, point);
+                },
+                // Already handled above — can't reach here.
+                Command::ProcessAlacrittyEvent(_)
+                | Command::MouseReport(..)
+                | Command::Write(_) => {},
+            };
+            self.internal_sync(&mut term);
+        }
+        // If try_lock_unfair() failed, the command is silently dropped.
+        // This is acceptable: scroll/select/link events are continuous and
+        // will be retried on the next mouse/keyboard event. Resize is
+        // handled by sync_and_redraw() which also tries the lock.
+
+        Action::default()
     }
 
     fn process_link_action(
@@ -516,9 +542,14 @@ impl Backend {
     }
 
     pub fn sync(&mut self) {
-        let term = self.term.clone();
-        let mut term = term.lock();
-        self.internal_sync(&mut term);
+        let term_arc = self.term.clone();
+        // Use try_lock_unfair to avoid blocking the main thread.
+        // If the PTY event loop holds the lock, we skip this sync —
+        // the content will be slightly stale until the next frame.
+        let mut guard = term_arc.try_lock_unfair();
+        if let Some(ref mut term) = guard {
+            self.internal_sync(term);
+        }
     }
 
     fn internal_sync(&mut self, terminal: &mut Term<EventProxy>) {
