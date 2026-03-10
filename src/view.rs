@@ -133,6 +133,9 @@ impl<'a> TerminalView<'a> {
         layout_position: Point,
         commands: &mut Vec<Command>,
     ) {
+        let rel_x = cursor_position.x - layout_position.x;
+        let rel_y = cursor_position.y - layout_position.y;
+
         let cmd = if terminal_mode.intersects(TermMode::MOUSE_MODE) {
             Command::MouseReport(
                 MouseButton::LeftButton,
@@ -140,6 +143,9 @@ impl<'a> TerminalView<'a> {
                 state.mouse_position_on_grid,
                 true,
             )
+        } else if state.keyboard_modifiers.shift() {
+            // Shift+Click: extend existing selection to the clicked point.
+            Command::SelectUpdate((rel_x, rel_y))
         } else {
             let current_click = Click::new(
                 cursor_position,
@@ -154,10 +160,7 @@ impl<'a> TerminalView<'a> {
             state.last_click = Some(current_click);
             Command::SelectStart(
                 selection_type,
-                (
-                    cursor_position.x - layout_position.x,
-                    cursor_position.y - layout_position.y,
-                ),
+                (rel_x, rel_y),
             )
         };
         commands.push(cmd);
@@ -889,7 +892,6 @@ mod tests {
 
             for _selection_type in cases {
                 let mut state = TerminalViewState::new();
-                state.keyboard_modifiers = Modifiers::SHIFT;
                 let mut commands = Vec::new();
 
                 TerminalView::handle_left_button_pressed(
@@ -907,6 +909,32 @@ mod tests {
                 ),);
                 assert!(state.is_dragged);
             }
+        }
+
+        #[test]
+        fn shift_click_extends_selection() {
+            let terminal_mode = TermMode::SGR_MOUSE;
+            let cursor_position = Point { x: 200.0, y: 150.0 };
+            let layout_position = Point { x: 50.0, y: 50.0 };
+
+            let mut state = TerminalViewState::new();
+            state.keyboard_modifiers = Modifiers::SHIFT;
+            let mut commands = Vec::new();
+
+            TerminalView::handle_left_button_pressed(
+                &mut state,
+                &terminal_mode,
+                cursor_position,
+                layout_position,
+                &mut commands,
+            );
+
+            assert_eq!(commands.len(), 1);
+            assert!(matches!(
+                commands[0],
+                Command::SelectUpdate((150.0, 100.0))
+            ));
+            assert!(state.is_dragged);
         }
     }
 
