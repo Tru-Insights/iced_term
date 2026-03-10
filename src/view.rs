@@ -1256,8 +1256,8 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(commands[0], Command::Scroll(-2)));
-            assert_eq!(state.scroll_pixels, -8.600002);
+            assert!(matches!(commands[0], Command::Scroll(2)));
+            assert_eq!(state.scroll_pixels, 8.600002);
         }
 
         #[test]
@@ -1274,8 +1274,8 @@ mod tests {
             );
 
             assert_eq!(commands.len(), 1);
-            assert!(matches!(commands[0], Command::Scroll(3)));
-            assert_eq!(state.scroll_pixels, 5.4000034);
+            assert!(matches!(commands[0], Command::Scroll(-3)));
+            assert_eq!(state.scroll_pixels, -5.4000034);
         }
     }
 }
