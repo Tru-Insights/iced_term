@@ -75,6 +75,18 @@ impl Terminal {
     }
 
     pub fn handle(&mut self, cmd: Command) -> Action {
+        self.handle_internal(cmd, true)
+    }
+
+    /// Handle a command without syncing or redrawing. Use when the terminal
+    /// is not visible (e.g. window unfocused / minimized) to avoid expensive
+    /// font rasterization on a cold cache. Call `sync_and_redraw()` once
+    /// when the window regains focus.
+    pub fn handle_no_redraw(&mut self, cmd: Command) -> Action {
+        self.handle_internal(cmd, false)
+    }
+
+    fn handle_internal(&mut self, cmd: Command, redraw: bool) -> Action {
         let mut action = Action::default();
 
         match cmd {
@@ -92,11 +104,15 @@ impl Terminal {
             },
         };
 
-        self.sync_and_redraw();
+        if redraw {
+            self.sync_and_redraw();
+        }
         action
     }
 
-    fn sync_and_redraw(&mut self) {
+    /// Force a sync and redraw. Call after regaining focus if
+    /// handle_no_redraw() was used while the window was unfocused.
+    pub fn sync_and_redraw(&mut self) {
         self.sync_font();
         self.backend.sync();
         self.redraw();
