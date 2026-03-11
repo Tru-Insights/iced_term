@@ -592,7 +592,9 @@ impl Backend {
         };
 
         let term = self.term.clone();
-        let term = term.lock();
+        let Some(term) = term.try_lock_unfair() else {
+            return Vec::new();
+        };
 
         let mut matches = Vec::new();
 
@@ -616,7 +618,9 @@ impl Backend {
     /// Get all terminal text content (including scrollback history)
     pub fn get_all_text(&self) -> String {
         let term = self.term.clone();
-        let term = term.lock();
+        let Some(term) = term.try_lock_unfair() else {
+            return String::new();
+        };
 
         let mut result = String::new();
         let mut current_line = None;
@@ -663,7 +667,9 @@ impl Backend {
     /// Scroll the terminal to show a specific line
     pub fn scroll_to_line(&mut self, line: i32) {
         let term = self.term.clone();
-        let mut term = term.lock();
+        let Some(mut term) = term.try_lock_unfair() else {
+            return;
+        };
 
         // Line is in history (negative) or viewport (positive)
         // We want to scroll so the line is near the top of the viewport
