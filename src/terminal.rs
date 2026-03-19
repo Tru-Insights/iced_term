@@ -140,6 +140,11 @@ impl Terminal {
         self.backend.get_all_text()
     }
 
+    /// Returns the current terminal mode flags (e.g. BRACKETED_PASTE, ALT_SCREEN).
+    pub fn terminal_mode(&self) -> crate::TermMode {
+        self.backend.last_content.terminal_mode
+    }
+
     /// Scroll the terminal to show a specific line
     pub fn scroll_to_line(&mut self, line: i32) {
         self.backend.scroll_to_line(line);

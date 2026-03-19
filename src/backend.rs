@@ -158,7 +158,7 @@ pub struct Backend {
     term: Arc<FairMutex<Term<EventProxy>>>,
     size: TerminalSize,
     notifier: Notifier,
-    last_content: RenderableContent,
+    pub(crate) last_content: RenderableContent,
     pub(crate) url_regex: RegexSearch,
 }
 
