@@ -754,6 +754,28 @@ pub struct EventProxy(mpsc::Sender<Event>);
 
 impl EventListener for EventProxy {
     fn send_event(&self, event: Event) {
-        let _ = self.0.blocking_send(event);
+        // MUST NOT BLOCK. alacritty invokes this synchronously, and one of
+        // the live callers is the Iced main thread inside `Backend::handle`
+        // (any Term op — scroll/resize/select — can fire send_event while
+        // we hold the term lock). The receiver is drained on a tokio worker
+        // which then forwards via `output.send(...).await` back to the main
+        // thread, so a full channel + main-thread `blocking_send` = deadlock.
+        //
+        // Wakeup / MouseCursorDirty / Bell / Title coalesce naturally — a
+        // dropped Wakeup self-heals on the next PTY read or input event.
+        // PtyWrite (terminal-program responses to OSC queries) is low rate
+        // and the channel is sized large enough to never realistically drop.
+        match self.0.try_send(event) {
+            Ok(()) => {},
+            Err(tokio::sync::mpsc::error::TrySendError::Full(ev)) => {
+                eprintln!(
+                    "[iced_term] send_event dropped (channel full): {:?}",
+                    std::mem::discriminant(&ev),
+                );
+            },
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                // Receiver gone — terminal is being torn down. Silent drop.
+            },
+        }
     }
 }

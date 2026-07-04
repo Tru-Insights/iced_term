@@ -41,7 +41,11 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(id: u64, settings: Settings) -> Result<Self> {
-        let (backend_event_tx, backend_event_rx) = mpsc::channel(100);
+        // Sized large to make `send_event` drops vanishingly rare under
+        // burst load. The send side is non-blocking (`try_send`) — see
+        // `EventProxy::send_event` in backend.rs for the deadlock that
+        // motivated removing `blocking_send`.
+        let (backend_event_tx, backend_event_rx) = mpsc::channel(4096);
         let theme = Theme::new(settings.theme);
         let font = TermFont::new(settings.font);
 
